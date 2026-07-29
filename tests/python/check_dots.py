@@ -20,9 +20,17 @@ DOTS_DIR = REPO_ROOT / "Scripts" / "dots"
 
 
 def declared_paths(table: dict) -> list:
-    """`paths` is a single string or a list of them."""
+    """`paths` is a single string or a list of them.
+
+    Anything else is wrapped rather than iterated, so a malformed value is
+    reported as a wrong type instead of crashing the checker.
+    """
     paths = table.get("paths", [])
-    return [paths] if isinstance(paths, str) else list(paths)
+    if isinstance(paths, str):
+        return [paths]
+    if isinstance(paths, list):
+        return list(paths)
+    return [paths]
 
 
 def has_glob(relative: str) -> bool:
@@ -30,13 +38,17 @@ def has_glob(relative: str) -> bool:
     return any(character in relative for character in "*?[")
 
 
-def inside_repo(relative: str) -> bool:
-    """A source path has to stay in the checkout, absolute or `..` included."""
-    root = REPO_ROOT.resolve()
+def inside(root: pathlib.Path, relative: str) -> bool:
+    """A declared path has to stay under `root`, absolute or `..` included."""
     try:
         return (root / relative).resolve().is_relative_to(root)
     except (OSError, ValueError):
         return False
+
+
+def inside_repo(relative: str) -> bool:
+    """A source root has to stay in the checkout."""
+    return inside(REPO_ROOT.resolve(), relative)
 
 
 def entries(document: dict) -> list[tuple[str, dict]]:
@@ -101,10 +113,13 @@ def main() -> int:
                 elif not (REPO_ROOT / source_root).is_dir():
                     fail(f"{where} points at a missing source_root {source_root!r}")
                 else:
+                    root = (REPO_ROOT / source_root).resolve()
                     for relative in declared_paths(table):
                         if not isinstance(relative, str):
                             fail(f"{where} declares a path as {type(relative).__name__}, expected a string")
-                        elif not has_glob(relative) and not (REPO_ROOT / source_root / relative).exists():
+                        elif not inside(root, relative):
+                            fail(f"{where} points outside its source_root with path {relative!r}")
+                        elif not has_glob(relative) and not (root / relative).exists():
                             fail(f"{where} points at a missing path {relative!r}")
 
         for component, table in dependencies(document):
