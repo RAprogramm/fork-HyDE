@@ -140,11 +140,22 @@ if [[ -r $HYPRLAND_CONFIG ]]; then
 
         if [[ "${HYPRLAND_CONFIG##*.}" == "lua" ]]; then
             print_log -sec "theme" -stat "dump" "hypr.theme to lua"
-            hyq --dump "$HYDE_THEME_DIR/hypr.theme" --schema "$XDG_DATA_HOME/hypr/schema/hyprland-lua.json" --export lua >"$XDG_STATE_HOME/hyde/lua_state/hypr_theme.lua"
+            theme_state="$XDG_STATE_HOME/hyde/lua_state/hypr_theme.lua"
+            theme_buffer="$(mktemp)"
+            if hyq --dump "$HYDE_THEME_DIR/hypr.theme" --schema "$XDG_DATA_HOME/hypr/schema/hyprland-lua.json" --export lua >"$theme_buffer" &&
+                [ -s "$theme_buffer" ] &&
+                mv "$theme_buffer" "$theme_state"; then
+                :
+            else
+                rm -f "$theme_buffer"
+                print_log -sec "theme" -crit "error" "could not dump hypr.theme, $theme_state keeps the previous theme"
+                exit 1
+            fi
         else
             print_log -sec "theme" -stat "sanitize" "hypr.theme"
             sanitize_hypr_theme "$HYDE_THEME_DIR/hypr.theme" "$XDG_CONFIG_HOME/hypr/themes/theme.conf"
         fi
+
 
     fi
     load_hypr_variables "$HYDE_THEME_DIR/hypr.theme"                               # ? loads the theme vars
